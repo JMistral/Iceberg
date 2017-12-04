@@ -4,6 +4,8 @@ import pylab
 import colorsys
 from scipy.ndimage.filters import uniform_filter
 from scipy.ndimage.measurements import variance
+from skimage.transform import rotate
+
 
 def RGB_HSV_composite(data):
     rgb_arrays = []
@@ -17,13 +19,12 @@ def RGB_HSV_composite(data):
         b = (band_3 + abs(band_3.min())) / np.max((band_3 + abs(band_3.min())))
 
         rgb = np.dstack((r, g, b))
-        rgb = rgb * 255
         rgb_arrays.append(rgb)
             
     rgb_arrays = np.array(rgb_arrays)
-    hsv_arrays = RGB_to_HSV(rgb_arrays/255)
+    hsv_arrays = RGB_to_HSV(rgb_arrays)
     # use uint8 0-255 for RGB code
-    rgb_arrays = np.uint8(rgb_arrays)
+    #rgb_arrays = np.uint8(rgb_arrays)
     return rgb_arrays, hsv_arrays
 
 
@@ -43,29 +44,6 @@ def MP_composite(data):
     #MP_arrays = np.uint8(MP_arrays)
     return np.array(MP_arrays)
 
-"""
-def plotmy3d(c, name):
-
-    data = [
-        go.Surface(
-            z=c
-        )
-    ]
-    layout = go.Layout(
-        title=name,
-        autosize=False,
-        width=700,
-        height=700,
-        margin=dict(
-            l=65,
-            r=50,
-            b=65,
-            t=90
-        )
-    )
-    fig = go.Figure(data=data, layout=layout)
-    py.iplot(fig)
-"""
 
 
 def RGB_to_HSV(rgb_data):
@@ -87,9 +65,9 @@ def HSV_to_RGB(hsv_data):
             for y in range(np.shape(hsv_data)[2]):
                 rgb = np.array(colorsys.hsv_to_rgb(hsv_data[i,x,y,0],hsv_data[i,x,y,1],hsv_data[i,x,y,2]))
                 #print(hsv)
-                rgb_data[i,x,y,:] = rgb * 255
-    #rgb_data = np.array(rgb_data)            
-    return np.uint8(rgb_data)
+                rgb_data[i,x,y,:] = rgb
+    rgb_data = np.array(rgb_data)            
+    return rgb_data
 
     
 def lee_filter(img, size):
@@ -103,7 +81,7 @@ def lee_filter(img, size):
     img_output = img_mean + img_weights * (img - img_mean)
     return img_output
 
-def flatten_img(img,labels,size):
+def flatten_img(img,labels,angles,size):
     processed_data_list = []
     for i in range(np.shape(img)[0]):
         img_flattened = []
@@ -111,6 +89,76 @@ def flatten_img(img,labels,size):
         img_flattened.append(img[i,:,:,1].reshape(size[0]*size[1]))
         img_flattened.append(img[i,:,:,2].reshape(size[0]*size[1]))
         img_flattened.append(labels)
+        img_flattened.append(angles)
         processed_data_list.append(img_flattened)
         
     return np.array(processed_data_list)
+
+
+
+def transform(img):
+    degrees = np.array(range(30,330))
+    
+    new_array = np.zeros_like(img)
+    for i in range(img.shape[0]):
+        angle =  np.random.choice(degrees, 1)
+        new_img = rotate(img[i,:,:,:], angle, mode = 'edge')
+        new_array[i,:,:,:] = new_img
+    return new_array
+
+def simple_augmentation(X_train, X_angle_train, y_train, percent ):
+    
+    X_angle_train = X_angle_train.reshape((X_angle_train.shape[0],1))
+    y_train = y_train.reshape((y_train.shape[0],1))
+    
+    ships = np.where(y_train ==0)[0]
+    chosen_ships = np.random.choice(ships, np.int(ships.shape[0]*percent))
+    icebergs = np.where(y_train ==1)[0]
+    chosen_icebergs = np.random.choice(icebergs, np.int(icebergs.shape[0]*percent))
+    
+    new_ships = transform(X_train[chosen_ships,:,:,:])
+    new_icebergs = transform(X_train[chosen_icebergs,:,:,:])
+    
+    new_X = np.concatenate( (X_train, new_ships, new_icebergs) )
+    new_angle = np.concatenate( (X_angle_train, X_angle_train[chosen_ships], X_angle_train[chosen_icebergs]) )
+    new_y = np.concatenate( (y_train, y_train[chosen_ships], y_train[chosen_icebergs]) )
+    
+    return new_X, new_angle, new_y
+
+
+def Preprocessing(df_SAR,train = True,color_space = 'HSV'):
+    #get color composite
+    rgb, hsv = RGB_HSV_composite(df_SAR)
+    angle = np.array(df_SAR.inc_angle)
+    if train:
+        y = np.array(df_SAR["is_iceberg"])
+    else:
+        # dummy label for test data
+        y = 2*np.ones_like(df_SAR["id"].values)
+    
+    #image augmentation
+    new_hsv, new_angle, new_y = simple_augmentation(hsv, angle, y, 0.5 )
+    
+    # speckle filtering
+    hsv_filtered = np.zeros_like(new_hsv)
+    for i in range(np.shape(new_hsv)[0]):
+        hsv_filtered[i,:,:,0] = new_hsv[i,:,:,0]
+        hsv_filtered[i,:,:,1] = new_hsv[i,:,:,1]
+        hsv_filtered[i,:,:,2] = lee_filter(new_hsv[i,:,:,2], 3)
+        
+    if color_space is 'HSV':
+        if train:
+            return hsv_filtered, new_angle, new_y
+        else:
+            return hsv_filtered, new_angle
+        
+    elif color_space is 'RGB':
+        rgb_filtered = HSV_to_RGB(hsv_filtered)
+        if train:
+            return rgb_filtered, new_angle, new_y
+        else:
+            return rgb_filtered, new_angle
+    else:
+        print('wrong color space name')
+    
+    
