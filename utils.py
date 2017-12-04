@@ -71,8 +71,8 @@ def HSV_to_RGB(hsv_data):
 
     
 def lee_filter(img, size):
-    img_mean = uniform_filter(img, (size, size))
-    img_sqr_mean = uniform_filter(img**2, (size, size))
+    img_mean = uniform_filter(img, size)
+    img_sqr_mean = uniform_filter(img**2, size)
     img_variance = img_sqr_mean - img_mean**2
 
     overall_variance = variance(img)
@@ -126,9 +126,16 @@ def simple_augmentation(X_train, X_angle_train, y_train, percent ):
     return new_X, new_angle, new_y
 
 
-def Preprocessing(df_SAR,train = True,color_space = 'HSV'):
-    #get color composite
+def Preprocessing(df_SAR,train = True,color_space = 'RGB'):
+    # get color composite
     rgb, hsv = RGB_HSV_composite(df_SAR)
+    
+    # speckle filtering
+    rgb_filtered = np.zeros_like(rgb)
+    for i in range(np.shape(rgb)[0]):
+        rgb_filtered[i,:,:,:] = lee_filter(rgb[i,:,:,:], 3)
+    
+    # other info
     angle = np.array(df_SAR.inc_angle)
     if train:
         y = np.array(df_SAR["is_iceberg"])
@@ -137,27 +144,20 @@ def Preprocessing(df_SAR,train = True,color_space = 'HSV'):
         y = 2*np.ones_like(df_SAR["id"].values)
     
     #image augmentation
-    new_hsv, new_angle, new_y = simple_augmentation(hsv, angle, y, 0.5 )
-    
-    # speckle filtering
-    hsv_filtered = np.zeros_like(new_hsv)
-    for i in range(np.shape(new_hsv)[0]):
-        hsv_filtered[i,:,:,0] = new_hsv[i,:,:,0]
-        hsv_filtered[i,:,:,1] = new_hsv[i,:,:,1]
-        hsv_filtered[i,:,:,2] = lee_filter(new_hsv[i,:,:,2], 3)
+    new_rgb, new_angle, new_y = simple_augmentation(rgb_filtered, angle, y, 0.5 )
         
     if color_space is 'HSV':
+        new_hsv = HSV_to_RGB(new_rgb)
         if train:
-            return hsv_filtered, new_angle, new_y
+            return new_hsv, new_angle, new_y
         else:
-            return hsv_filtered, new_angle
+            return new_hsv, new_angle
         
     elif color_space is 'RGB':
-        rgb_filtered = HSV_to_RGB(hsv_filtered)
         if train:
-            return rgb_filtered, new_angle, new_y
+            return new_rgb, new_angle, new_y
         else:
-            return rgb_filtered, new_angle
+            return new_rgb, new_angle
     else:
         print('wrong color space name')
     

@@ -31,7 +31,7 @@ def getModel(input_shape1= (75, 75, 3), input_shape2= (1,)):
     gmodel.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
     gmodel.add(Dropout(0.25))
 
-    Conv Layer 4
+    #Conv Layer 4
     gmodel.add(Conv2D(128, kernel_size=(3, 3), activation='relu'))
     gmodel.add(MaxPooling2D(pool_size=(2, 2), strides=(2, 2)))
     gmodel.add(Dropout(0.25))
@@ -48,7 +48,7 @@ def getModel(input_shape1= (75, 75, 3), input_shape2= (1,)):
     #Dense Layers
     gmodel.add(Dense(256))
     gmodel.add(Activation('relu'))
-    gmodel.add(Dropout(0.25))
+    gmodel.add(Dropout(0.20))
 
     #Dense Layer 2
     #gmodel.add(Dense(256))
@@ -59,7 +59,8 @@ def getModel(input_shape1= (75, 75, 3), input_shape2= (1,)):
     gmodel.add(Dense(1))
     gmodel.add(Activation('sigmoid'))
 
-   # my_cnn = Model(inputs=[pic_input,ang_input],outputs=gmodel)
+    #  Adam - from a paper published in 2015. Adaptive moment estimation (an optimization algorithm)
+    # lr - learning rate, beta1& beta2 exponential decay rate, epsilon - a small number to prevent devision by zero
     mypotim=Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
     gmodel.compile(loss='binary_crossentropy',
                   optimizer=mypotim,
